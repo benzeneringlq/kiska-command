@@ -1,0 +1,18 @@
+name: Native core
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  native-core:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure standalone core
+        run: cmake -S . -B build -DBUILD_GODOT_EXTENSION=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

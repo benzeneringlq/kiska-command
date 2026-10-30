@@ -1,0 +1,21 @@
+{
+  "source": "USGS National Map 3DEP",
+  "service": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer",
+  "request": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage?bbox=506306.43415547325%2C5734309.375016515%2C555506.4341554733%2C5783509.375016515&bboxSR=32660&imageSR=32660&size=1025%2C1025&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&renderingRule=%7B%22rasterFunction%22%3A%22None%22%7D&f=json",
+  "crs": "EPSG:32660",
+  "centre_utm": [
+    530906.4341554733,
+    5758909.375016515
+  ],
+  "span_m": 49152,
+  "samples": 1025,
+  "sample_spacing_m": 48,
+  "orientation": "row 0 north; +x east; +z south",
+  "vertical_scale": 1,
+  "download_date": "2026-10-30",
+  "source_tiff_sha256": "d1699de42f297f9e5069c3beee0d5cd02485757e1c2541fa925535abc3f7ae10",
+  "height_sha256": "f5e551b8fc6f522bd313acc4f355593bda26fe2875c77788eb2da238204cab9c",
+  "min_m": -8.0,
+  "max_m": 1199.356201171875,
+  "note": "48 m output sampling is not a claim of source survey resolution. Ocean = synthetic -8 m. Camps, roads and grading are fictional gameplay additions."
+}

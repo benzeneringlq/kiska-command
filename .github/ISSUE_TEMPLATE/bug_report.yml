@@ -1,0 +1,24 @@
+name: Bug report / 问题反馈
+description: Report gameplay, command, graphics or build problems.
+body:
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps / 复现步骤
+      placeholder: Include the vehicle, seat, command target and whether the aircraft was grounded.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result / 预期与实际结果
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, GPU and Godot version / 系统、显卡和引擎版本
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots / 日志或截图

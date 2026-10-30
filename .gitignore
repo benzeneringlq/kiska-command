@@ -1,0 +1,15 @@
+.godot/
+build/
+third_party/godot-cpp/
+tools/Godot.app/
+game/bin/*
+!game/bin/.gitkeep
+*.DS_Store
+artifacts/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+dist/
+build-core/

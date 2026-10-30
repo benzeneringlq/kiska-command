@@ -1,0 +1,104 @@
+name: Desktop release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows
+            os: windows-2022
+          - target: linux
+            os: ubuntu-22.04
+          - target: macos-intel
+            os: macos-15-intel
+          - target: macos-arm64
+            os: macos-14
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: .release-tools
+          key: godot-4.5.2-${{ matrix.target }}-v1
+      - name: Download verified Godot and pinned bindings
+        run: python tools/release.py prepare ${{ matrix.target }}
+      - name: Configure release extension
+        run: cmake -S . -B release-build -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+      - name: Build release extension and core
+        run: cmake --build release-build --config Release --parallel 3
+      - name: Test native core
+        run: ctest --test-dir release-build -C Release --output-on-failure
+      - name: Export, test packaged game and archive
+        run: python tools/release.py export ${{ matrix.target }}
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.target }}
+          path: dist/*-smoke.log
+          if-no-files-found: ignore
+      - name: Upload playable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: |
+            dist/KiskaCommand-*.zip
+            dist/KiskaCommand-*.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    name: Publish all four packages
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify complete asset set and write checksums
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, os
+          root = Path('release-assets')
+          tag = os.environ['GITHUB_REF_NAME']
+          expected = {f'KiskaCommand-{tag}-{target}.{ext}' for target, ext in [
+              ('windows', 'zip'), ('linux', 'tar.gz'), ('macos-intel', 'zip'), ('macos-arm64', 'zip')]}
+          assert {p.name for p in root.iterdir()} == expected, 'Missing or unexpected release packages'
+          with (root / 'SHA256SUMS.txt').open('w') as out:
+              for name in sorted(expected):
+                  digest = hashlib.file_digest((root / name).open('rb'), 'sha256').hexdigest()
+                  out.write(f'{digest}  {name}\n')
+          PY
+      - name: Publish release after successful builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --verify-tag --draft --title "Kiska Command $RELEASE_TAG / 基斯卡行动" --notes-file docs/release-notes.md
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest

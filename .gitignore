@@ -13,3 +13,5 @@ __pycache__/
 !.env.example
 dist/
 build-core/
+.release-tools/
+release-build/

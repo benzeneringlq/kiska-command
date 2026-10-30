@@ -8,7 +8,13 @@ A single-player tactical squad FPS prototype built with **Godot 4.5 + C++17**, s
 
 项目为原创灰盒原型，不包含《闪点行动》的代码、模型、音效或原版地图。没有多人模式，AI 导航、车辆和飞行仍是简化模拟。
 
-## 启动
+## 下载游戏
+
+[GitHub Releases 下载](https://github.com/benzeneringlq/kiska-command/releases)：提供 **Windows x86_64、Linux x86_64、macOS Intel、macOS Apple Silicon（M1/M2 等）** 四个独立游戏包。完整解压后启动，无需安装 Godot；不要选择仅含源码的 Source code 下载项。
+
+Windows 打开 `KiskaCommand.exe`；Linux 运行 `./KiskaCommand.x86_64`；macOS 打开 `Kiska Command.app`。macOS 使用 ad-hoc 本地签名，暂未苹果公证，首次启动可能需要在“系统设置 → 隐私与安全性”选择“仍要打开”。Windows 也未配置付费签名证书。
+
+## 从源码启动
 
 依赖：Godot 4.5+、CMake 3.20+、Ninja、C++17 编译器、Python 3。
 
@@ -76,7 +82,13 @@ bootstrap 在 macOS 下载官方 Godot 4.5.2，并取得固定版本的 godot-cp
 ./tools/benchmark.sh
 ```
 
-实际引擎套件覆盖战斗、四阶段任务、设置、驾驶、多人安全下车、飞行中舱内走动、装载投放、拖挂和智能任务。记录及未验证范围见 [verification.md](docs/verification.md)。GitHub Actions 当前只验证独立 C++ 核心；绿色 CI 不代表所有平台的游戏测试通过。
+实际引擎套件覆盖战斗、四阶段任务、设置、驾驶、多人安全下车、飞行中舱内走动、装载投放、拖挂和智能任务。记录及未验证范围见 [verification.md](docs/verification.md)。普通提交的 GitHub Actions 验证独立 C++ 核心；发布流程在四个平台各自编译 Release 扩展、导出完整游戏，并用导出的游戏运行 184 项集成检查。自动检查使用无显示器模式，不能替代各显卡的实际画面和性能验证。
+
+## 自动发布
+
+推送与 `game/project.godot` 版本一致的 `v*` 标签（例如 `v0.7.0`）会启动 [Desktop release](.github/workflows/release.yml)。四个平台全部成功后，自动发布四个游戏包及 SHA-256 校验文件。失败时不发布不完整的新版本；可在 Actions 页面重新运行。手动 Run workflow 可先构建下载 Actions 中的游戏包，选择版本标签运行时也会发布。
+
+构建工具固定到 Godot 4.5.2，下载官方引擎与模板并校验 SHA-512；不重新编译引擎。各包包含第三方许可与构建版本信息。
 
 [贡献说明](CONTRIBUTING.md) · [素材与高程来源](ASSETS.md) · [MIT 许可证](LICENSE)
 

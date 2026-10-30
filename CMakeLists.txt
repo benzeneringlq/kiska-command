@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(KiskaCommand LANGUAGES CXX)
+if(MSVC)
+  # Keep the game and bindings on the same static CRT; no VC runtime installer.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_GODOT_EXTENSION "Build the Godot native extension" ON)
@@ -14,13 +18,13 @@ if(BUILD_GODOT_EXTENSION)
   if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/godot-cpp/CMakeLists.txt")
     message(FATAL_ERROR "Run tools/bootstrap.sh first to download the pinned godot-cpp binding.")
   endif()
-  set(GODOTCPP_TARGET template_debug CACHE STRING "" FORCE)
+  set(GODOTCPP_TARGET template_debug CACHE STRING "Godot binding target (template_debug or template_release)")
   set(GODOTCPP_BUILD_PROFILE "${CMAKE_CURRENT_SOURCE_DIR}/native/build_profile.json" CACHE FILEPATH "" FORCE)
   add_subdirectory(third_party/godot-cpp)
   add_library(ridgeline SHARED native/src/extension.cpp)
   target_link_libraries(ridgeline PRIVATE godot-cpp tactical_core)
   set_target_properties(ridgeline PROPERTIES
     PREFIX "lib" OUTPUT_NAME "ridgeline"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/game/bin"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/game/bin")
+    LIBRARY_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_SOURCE_DIR}/game/bin>"
+    RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_SOURCE_DIR}/game/bin>")
 endif()

@@ -28,7 +28,7 @@ cd kiska-command
 
 当前 Mac 已经构建，可直接双击 `Play.command`。`GODOT_BIN=/path/to/godot ./tools/run.sh` 可指定已有引擎。Godot 编辑器入口为 `game/project.godot`。
 
-bootstrap 在 macOS 下载官方 Godot 4.5.2，并取得固定版本的 godot-cpp；Linux/Windows 请自行准备对应架构的 Godot。当前实际游戏验证平台为 Intel Mac / Radeon Pro 555，其他平台仍需各自验证。只编译本项目扩展，不重新编译引擎。
+bootstrap 在 macOS 下载官方 Godot 4.5.2，并取得固定版本的 godot-cpp；Linux/Windows 请自行准备对应架构的 Godot。实际画面与性能验证目前主要在 Intel Mac / Radeon Pro 555 上进行；四种发布环境另有无显示器的导出游戏集成检查。只编译本项目扩展，不重新编译引擎。
 
 ## 少步骤的指挥
 

@@ -152,3 +152,11 @@ RENDER_BENCHMARK: frames=600 mean_fps=84.2 renderer=GL Compatibility image_pixel
 - 自主检查覆盖：单次命令完整装载并关舱、单次命令倒车卸载/警戒、步行前往守位、实际长距离自动运输/抵达后下车、取消与座位清理、自动随玩家登离车、危险运输状态拒绝、实际冻结车体后的堵塞终止、背包中断 Q 不误发任务。
 - 新增的长距离运输检查发现无特定目的载具时 carrier==null 与 destination==null 相等，导致所有空车被错误过滤；改为仅在有具体目的载具时排除已在其内部的货物，重新验证通过。
 - GitHub Actions 仅运行独立 C++ 核心的 Ubuntu/macOS 构建和测试；Godot 全套检查在当前 Intel Mac 本机执行。未给这一版建立新的可靠 FPS 基准，原有灰盒/物理/地图精度限制仍然存在。
+
+## v0.7.3 / 2026-10-30：桌面导出与 Universal 2
+
+- [完整打包试运行](https://github.com/benzeneringlq/kiska-command/actions/runs/41043105349)通过：Windows x86_64、Ubuntu 22.04 x86_64、macOS Apple Silicon，均编译 Release C++ 扩展、运行核心检查、导出正式游戏，并用导出的可执行文件/PCK 运行 **184 项集成检查**。
+- Mac 使用官方未拆分的 Universal 2 模板；本项目 C++ 扩展通过 `CMAKE_OSX_ARCHITECTURES=x86_64;arm64` 编译为同样的双架构。检查实际包内的主程序和扩展均包含这两种架构，并用系统工具验证整个应用的 ad-hoc 签名。
+- 将 Apple Silicon 构建出的同一个压缩包下载到 macOS Intel 环境，解压后再次核对架构和签名，并原生运行 **184 项集成检查**。不是在两台机器各自构建后假定通用。
+- 最终分发三个游戏包，覆盖上述四种运行环境，附 SHA-256 校验文件、版本/提交记录、字体/引擎/绑定的许可。推送匹配项目版本的标签时，所有构建和 Intel 复核成功后才发布 GitHub Release。
+- 自动检查使用 headless 模式，不提供 GPU 帧率、驱动兼容性或每个平台画面的结论。macOS 未做 Apple 公证，Windows 未使用付费签名证书；这些不等于已通过平台商店审核。

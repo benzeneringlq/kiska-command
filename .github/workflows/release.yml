@@ -23,9 +23,7 @@ jobs:
             os: windows-2022
           - target: linux
             os: ubuntu-22.04
-          - target: macos-intel
-            os: macos-15-intel
-          - target: macos-arm64
+          - target: macos-universal
             os: macos-14
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
@@ -37,11 +35,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .release-tools
-          key: godot-4.5.2-${{ matrix.target }}-v2
+          key: godot-4.5.2-${{ matrix.target }}-v3
       - name: Download verified Godot and pinned bindings
         run: python tools/release.py prepare ${{ matrix.target }}
       - name: Configure release extension
-        run: cmake -S . -B release-build -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+        if: runner.os != 'macOS'
+        run: cmake -S . -B release-build -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release
+      - name: Configure Universal 2 release extension
+        if: runner.os == 'macOS'
+        run: cmake -S . -B release-build -DCMAKE_BUILD_TYPE=Release -DGODOTCPP_TARGET=template_release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 '-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64'
       - name: Build release extension and core
         run: cmake --build release-build --config Release --parallel 3
       - name: Test native core
@@ -65,9 +67,33 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  publish:
-    name: Publish all four packages
+  verify-macos-intel:
+    name: Verify same Universal package on Intel
     needs: build
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-macos-universal
+          path: dist
+      - name: Verify architectures, signature and native Intel gameplay
+        run: python tools/release.py verify macos-universal
+      - name: Upload Intel test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-macos-intel
+          path: dist/*-smoke.log
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish desktop packages
+    needs: [build, verify-macos-intel]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-22.04
     permissions:
@@ -87,7 +113,7 @@ jobs:
           root = Path('release-assets')
           tag = os.environ['GITHUB_REF_NAME']
           expected = {f'KiskaCommand-{tag}-{target}.{ext}' for target, ext in [
-              ('windows', 'zip'), ('linux', 'tar.gz'), ('macos-intel', 'zip'), ('macos-arm64', 'zip')]}
+              ('windows', 'zip'), ('linux', 'tar.gz'), ('macos-universal', 'zip')]}
           assert {p.name for p in root.iterdir()} == expected, 'Missing or unexpected release packages'
           with (root / 'SHA256SUMS.txt').open('w') as out:
               for name in sorted(expected):

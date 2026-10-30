@@ -10,7 +10,6 @@ import re
 import shutil
 import subprocess
 import tarfile
-import tempfile
 import time
 import urllib.request
 import zipfile
@@ -23,8 +22,7 @@ BASE = f"https://github.com/godotengine/godot-builds/releases/download/{GODOT}-s
 TARGETS = {
     "windows": ("Windows", "win64.exe.zip", "windows_", "KiskaCommand.exe"),
     "linux": ("Linux", "linux.x86_64.zip", "linux_", "KiskaCommand.x86_64"),
-    "macos-intel": ("macOS Intel", "macos.universal.zip", "macos.zip", "Kiska Command.app"),
-    "macos-arm64": ("macOS Apple Silicon", "macos.universal.zip", "macos.zip", "Kiska Command.app"),
+    "macos-universal": ("macOS Universal", "macos.universal.zip", "macos.zip", "Kiska Command.app"),
 }
 
 
@@ -82,31 +80,6 @@ def templates_dir():
     return base / "export_templates" / f"{GODOT}.stable"
 
 
-def thin_macos_template(archive, target):
-    # Official macOS templates contain universal executables only. Godot's
-    # single-architecture presets expect explicitly named native executables.
-    arch = "arm64" if target == "macos-arm64" else "x86_64"
-    with tempfile.TemporaryDirectory(dir=TOOLS) as temporary:
-        temporary = Path(temporary)
-        derived = temporary / "macos.zip"
-        count = 0
-        with zipfile.ZipFile(archive) as source, zipfile.ZipFile(derived, "w", zipfile.ZIP_DEFLATED) as output:
-            for entry in source.infolist():
-                data = source.read(entry)
-                if "/Contents/MacOS/godot_macos_" in entry.filename and entry.filename.endswith(".universal"):
-                    universal = temporary / "universal"
-                    native = temporary / "native"
-                    universal.write_bytes(data)
-                    run(["lipo", universal, "-thin", arch, "-output", native])
-                    data = native.read_bytes()
-                    entry.filename = entry.filename.removesuffix("universal") + arch
-                    count += 1
-                output.writestr(entry, data)
-        if count != 2:
-            raise RuntimeError("Expected debug and release universal macOS template executables")
-        shutil.copy2(derived, archive)
-
-
 def prepare(target):
     TOOLS.mkdir(exist_ok=True)
     if not engine(target).exists():
@@ -117,7 +90,7 @@ def prepare(target):
         if os.name != "nt":
             engine(target).chmod(0o755)
     cached = TOOLS / "templates"
-    marker = cached / f"{target}-{GODOT}-v2.ready"
+    marker = cached / f"{target}-{GODOT}-v3.ready"
     if not marker.exists():
         archive = verified_download(f"Godot_v{GODOT}-stable_export_templates.tpz")
         cached.mkdir(exist_ok=True)
@@ -128,8 +101,6 @@ def prepare(target):
                     with bundle.open(info) as source, (cached / name).open("wb") as output:
                         shutil.copyfileobj(source, output)
         archive.unlink()
-        if target.startswith("macos"):
-            thin_macos_template(cached / "macos.zip", target)
         marker.touch()
     templates_dir().mkdir(parents=True, exist_ok=True)
     for source in cached.iterdir():
@@ -157,6 +128,40 @@ def checked_engine(args, marker=None, timeout=180):
         raise RuntimeError(f"Missing success marker: {marker}")
 
 
+def macos_binary(app):
+    binary = app / "Contents/MacOS/Kiska Command"
+    libraries = list(app.rglob("libridgeline.dylib"))
+    if len(libraries) != 1:
+        raise RuntimeError("Expected one embedded native extension in macOS app")
+    for native in [binary, libraries[0]]:
+        run(["lipo", native, "-verify_arch", "x86_64", "arm64"])
+    run(["codesign", "--verify", "--deep", "--strict", app])
+    return binary
+
+
+def smoke(binary, label):
+    # Exercise the shipped executable/PCK. --log-file captures Windows GUI output.
+    log = ROOT / "dist" / f"{label}-smoke.log"
+    result = run([binary, "--headless", "--fixed-fps", "60", "--quit-after", "1800",
+                  "--log-file", log, "--", "--integration-test"],
+                 check=False, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
+    text = log.read_text(encoding="utf-8") if log.exists() else result.stdout + result.stderr
+    print(text, flush=True)
+    result.check_returncode()
+    if "INTEGRATION_PASS: 184 checks" not in text or re.search(r"SCRIPT ERROR|Parse Error|INTEGRATION_FAILED|ERROR:", text):
+        raise RuntimeError("Packaged release failed the engine integration suite")
+
+
+def verify(target):
+    if target != "macos-universal" or platform.machine() != "x86_64":
+        raise RuntimeError("This verification must run natively on an Intel Mac")
+    archive, = (ROOT / "dist").glob("KiskaCommand-*-macos-universal.zip")
+    output = ROOT / "dist/verify-intel"
+    run(["ditto", "-x", "-k", archive, output])
+    app, = output.rglob("Kiska Command.app")
+    smoke(macos_binary(app), "macos-intel")
+
+
 def export(target):
     version = re.search(r'config/version="([^"]+)"', (ROOT / "game/project.godot").read_text()).group(1)
     tag = os.environ.get("GITHUB_REF", "")
@@ -170,24 +175,12 @@ def export(target):
     checked_engine([engine(target), "--headless", "--path", ROOT / "game", "--editor", "--import", "--quit"], timeout=300)
     checked_engine([engine(target), "--headless", "--path", ROOT / "game", "--export-release", TARGETS[target][0], binary], timeout=300)
     if target.startswith("macos"):
-        binary = next((binary / "Contents/MacOS").iterdir())
-        arch = "arm64" if target == "macos-arm64" else "x86_64"
-        run(["lipo", "-verify_arch", arch, binary])
-        run(["lipo", "-verify_arch", arch, ROOT / "game/bin/libridgeline.dylib"])
-        run(["codesign", "--verify", "--deep", "--strict", output / TARGETS[target][3]])
+        if platform.machine() != "arm64":
+            raise RuntimeError("Build/export the universal macOS package on Apple Silicon, then verify it on Intel")
+        binary = macos_binary(binary)
     if os.name != "nt":
         binary.chmod(0o755)
-    # Test the shipped release executable/PCK, not a second editor invocation.
-    # Log-file also captures output from the Windows GUI-subsystem executable.
-    log = ROOT / "dist" / f"{target}-smoke.log"
-    result = run([binary, "--headless", "--fixed-fps", "60", "--quit-after", "1800",
-                  "--log-file", log, "--", "--integration-test"],
-                 check=False, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
-    text = log.read_text(encoding="utf-8") if log.exists() else result.stdout + result.stderr
-    print(text, flush=True)
-    result.check_returncode()
-    if "INTEGRATION_PASS: 184 checks" not in text or re.search(r"SCRIPT ERROR|Parse Error|INTEGRATION_FAILED|ERROR:", text):
-        raise RuntimeError("Packaged release failed the engine integration suite")
+    smoke(binary, target)
     for name in ["LICENSE", "ASSETS.md", "README.md"]:
         shutil.copy2(ROOT / name, output / name)
     licenses = output / "licenses"
@@ -204,7 +197,7 @@ def export(target):
         "解压整个文件夹后启动游戏；无需另装 Godot。请保留 PCK 和原生库。\n"
         "Extract the whole folder before launching; Godot is included. Keep the PCK and native libraries.\n\n"
         "Windows: KiskaCommand.exe\nLinux: ./KiskaCommand.x86_64 (chmod +x if needed)\n"
-        "macOS: Kiska Command.app; Intel 与 Apple Silicon 请选对应版本。\n"
+        "macOS: Kiska Command.app; 同一个 Universal 通用包支持 Intel 和 Apple Silicon。\n"
         "macOS uses ad-hoc signing, without Apple notarization. If blocked, use System Settings > Privacy & Security > Open Anyway.\n"
         "macOS 为本地签名，未公证；确认来源后可在系统设置 > 隐私与安全性中选择仍要打开。\n\n"
         "默认中文。WASD 移动，鼠标开火/瞄准，轻按 Q 智能命令、长按 Q 详细命令，B 背包，M 地图，E 上下车，F11 全屏。\n"
@@ -222,7 +215,7 @@ def export(target):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=["prepare", "export"])
+    parser.add_argument("operation", choices=["prepare", "export", "verify"])
     parser.add_argument("target", choices=TARGETS)
     args = parser.parse_args()
-    (prepare if args.operation == "prepare" else export)(args.target)
+    {"prepare": prepare, "export": export, "verify": verify}[args.operation](args.target)

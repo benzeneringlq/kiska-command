@@ -91,8 +91,11 @@ jobs:
           assert {p.name for p in root.iterdir()} == expected, 'Missing or unexpected release packages'
           with (root / 'SHA256SUMS.txt').open('w') as out:
               for name in sorted(expected):
-                  digest = hashlib.file_digest((root / name).open('rb'), 'sha256').hexdigest()
-                  out.write(f'{digest}  {name}\n')
+                  digest = hashlib.sha256()
+                  with (root / name).open('rb') as source:
+                      for block in iter(lambda: source.read(1024 * 1024), b''):
+                          digest.update(block)
+                  out.write(f'{digest.hexdigest()}  {name}\n')
           PY
       - name: Publish release after successful builds
         env:

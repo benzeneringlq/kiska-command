@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import time
 import urllib.request
 import zipfile
@@ -81,6 +82,31 @@ def templates_dir():
     return base / "export_templates" / f"{GODOT}.stable"
 
 
+def thin_macos_template(archive, target):
+    # Official macOS templates contain universal executables only. Godot's
+    # single-architecture presets expect explicitly named native executables.
+    arch = "arm64" if target == "macos-arm64" else "x86_64"
+    with tempfile.TemporaryDirectory(dir=TOOLS) as temporary:
+        temporary = Path(temporary)
+        derived = temporary / "macos.zip"
+        count = 0
+        with zipfile.ZipFile(archive) as source, zipfile.ZipFile(derived, "w", zipfile.ZIP_DEFLATED) as output:
+            for entry in source.infolist():
+                data = source.read(entry)
+                if "/Contents/MacOS/godot_macos_" in entry.filename and entry.filename.endswith(".universal"):
+                    universal = temporary / "universal"
+                    native = temporary / "native"
+                    universal.write_bytes(data)
+                    run(["lipo", universal, "-thin", arch, "-output", native])
+                    data = native.read_bytes()
+                    entry.filename = entry.filename.removesuffix("universal") + arch
+                    count += 1
+                output.writestr(entry, data)
+        if count != 2:
+            raise RuntimeError("Expected debug and release universal macOS template executables")
+        shutil.copy2(derived, archive)
+
+
 def prepare(target):
     TOOLS.mkdir(exist_ok=True)
     if not engine(target).exists():
@@ -91,7 +117,7 @@ def prepare(target):
         if os.name != "nt":
             engine(target).chmod(0o755)
     cached = TOOLS / "templates"
-    marker = cached / f"{target}-{GODOT}.ready"
+    marker = cached / f"{target}-{GODOT}-v2.ready"
     if not marker.exists():
         archive = verified_download(f"Godot_v{GODOT}-stable_export_templates.tpz")
         cached.mkdir(exist_ok=True)
@@ -102,6 +128,8 @@ def prepare(target):
                     with bundle.open(info) as source, (cached / name).open("wb") as output:
                         shutil.copyfileobj(source, output)
         archive.unlink()
+        if target.startswith("macos"):
+            thin_macos_template(cached / "macos.zip", target)
         marker.touch()
     templates_dir().mkdir(parents=True, exist_ok=True)
     for source in cached.iterdir():
@@ -143,6 +171,9 @@ def export(target):
     checked_engine([engine(target), "--headless", "--path", ROOT / "game", "--export-release", TARGETS[target][0], binary], timeout=300)
     if target.startswith("macos"):
         binary = next((binary / "Contents/MacOS").iterdir())
+        arch = "arm64" if target == "macos-arm64" else "x86_64"
+        run(["lipo", "-verify_arch", arch, binary])
+        run(["lipo", "-verify_arch", arch, ROOT / "game/bin/libridgeline.dylib"])
         run(["codesign", "--verify", "--deep", "--strict", output / TARGETS[target][3]])
     if os.name != "nt":
         binary.chmod(0o755)

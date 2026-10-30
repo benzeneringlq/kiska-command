@@ -37,7 +37,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .release-tools
-          key: godot-4.5.2-${{ matrix.target }}-v1
+          key: godot-4.5.2-${{ matrix.target }}-v2
       - name: Download verified Godot and pinned bindings
         run: python tools/release.py prepare ${{ matrix.target }}
       - name: Configure release extension

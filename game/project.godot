@@ -2,7 +2,7 @@ config_version=5
 
 [application]
 config/name="Kiska Command"
-config/version="0.7.0"
+config/version="0.7.1"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="Godot/app_userdata/Operation Ridgeline"
 config/custom_user_dir_name.linux="godot/app_userdata/Operation Ridgeline"
